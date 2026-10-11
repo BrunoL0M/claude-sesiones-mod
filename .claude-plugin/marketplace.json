@@ -1,0 +1,5 @@
+{
+  "name": "sesiones-local",
+  "owner": { "name": "Arch" },
+  "plugins": [{ "name": "sesiones", "source": "./" }]
+}
