@@ -1,0 +1,4 @@
+# Generado por Claude Code al cargar el mod en local
+.claude-plugin/types/
+tsconfig.json
+node_modules/
