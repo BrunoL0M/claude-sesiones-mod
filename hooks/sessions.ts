@@ -132,17 +132,17 @@ export function decodeProjectDir(name: string): string {
   return name.startsWith('-') ? name.replace(/-/g, '/') : name
 }
 
-function startOfDay(ms: number): number {
+/** Medianoche local de `daysAgo` días antes de `ms`, contando días de calendario. */
+function startOfDay(ms: number, daysAgo = 0): number {
   const d = new Date(ms)
-  d.setHours(0, 0, 0, 0)
-  return d.getTime()
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() - daysAgo).getTime()
 }
 
 export function bucketOf(updatedAt: number, now: number): DateBucket {
-  const today = startOfDay(now)
-  if (updatedAt >= today) return 'hoy'
-  if (updatedAt >= today - DAY) return 'ayer'
-  if (updatedAt >= today - 6 * DAY) return 'semana'
+  // Cortes por fecha y no restando 24 h: el día que cambia la hora dura 23 o 25 h.
+  if (updatedAt >= startOfDay(now)) return 'hoy'
+  if (updatedAt >= startOfDay(now, 1)) return 'ayer'
+  if (updatedAt >= startOfDay(now, 6)) return 'semana'
   if (updatedAt >= now - OLD_AFTER_DAYS * DAY) return 'mes'
   return 'antiguos'
 }
@@ -152,6 +152,7 @@ export function groupSessions(
   sessions: readonly SessionMeta[],
   now: number,
   filter = '',
+  home?: string,
 ): DirGroup[] {
   const needle = filter.trim().toLowerCase()
   const byDir = new Map<string, SessionMeta[]>()
@@ -159,7 +160,8 @@ export function groupSessions(
     if (
       needle &&
       !s.title.toLowerCase().includes(needle) &&
-      !s.cwd.toLowerCase().includes(needle)
+      !s.cwd.toLowerCase().includes(needle) &&
+      !shortPath(s.cwd, home).toLowerCase().includes(needle)
     ) {
       continue
     }
@@ -197,6 +199,11 @@ export function formatWhen(ms: number, now: number): string {
 
 /** Comando para reanudar la sesión desde cualquier terminal. */
 export function resumeCommand(s: SessionMeta): string {
-  const quoted = `'${s.cwd.replace(/'/g, `'\\''`)}'`
-  return `cd ${quoted} && claude --resume ${s.id}`
+  // El id sale del nombre del .jsonl: normalmente un UUID, pero se cita si no lo es.
+  const id = /^[\w-]+$/.test(s.id) ? s.id : shellQuote(s.id)
+  return `cd ${shellQuote(s.cwd)} && claude --resume ${id}`
+}
+
+function shellQuote(text: string): string {
+  return `'${text.replace(/'/g, `'\\''`)}'`
 }
