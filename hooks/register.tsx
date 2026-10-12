@@ -44,10 +44,21 @@ async function readTranscript($: EngineInterface, path: string, size: number): P
   return stdout
 }
 
-/** Recorre ~/.claude/projects y actualiza la lista; reusa la caché por mtime y tamaño. */
-async function rescan($: EngineInterface): Promise<void> {
-  const current = await read($, scan)
-  if (current.isScanning) return
+let scanning: Promise<void> | undefined
+
+/**
+ * Recorre ~/.claude/projects y actualiza la lista; reusa la caché por mtime y tamaño.
+ * Si ya hay un escaneo en curso devuelve ese mismo, así dos pulsaciones seguidas no
+ * escanean dos veces (leer `isScanning` y luego escribirlo no es atómico).
+ */
+function rescan($: EngineInterface): Promise<void> {
+  scanning ??= doRescan($).finally(() => {
+    scanning = undefined
+  })
+  return scanning
+}
+
+async function doRescan($: EngineInterface): Promise<void> {
   await update($, scan, s => ({ ...s, isScanning: true, error: undefined }))
   try {
     const root = await projectsDir($)
@@ -147,7 +158,7 @@ export const register: Register = on => {
     const query = await read($, filter)
     const homeDir = await read($, home)
     const now = Date.now()
-    const groups = groupSessions(list, now, query)
+    const groups = groupSessions(list, now, query, homeDir)
 
     const header = status.isScanning
       ? 'Buscando sesiones…'
