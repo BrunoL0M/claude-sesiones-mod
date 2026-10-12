@@ -3,15 +3,20 @@
 Panel dentro de Claude Code (terminal) con **todas las sesiones locales** de este
 equipo, leídas de `~/.claude/projects` (o `$CLAUDE_CONFIG_DIR/projects`):
 
-1. **Por directorio**: cada carpeta donde se inició un chat, la más reciente arriba
-   (el directorio actual viene desplegado).
-2. **Por fecha** dentro de cada directorio: Hoy · Ayer · Últimos 7 días · Últimos 30 días.
+1. **Por directorio**: cada carpeta donde se inició un chat. La carpeta actual va
+   primero, marcada con `●` y desplegada; las demás aparecen plegadas en una línea
+   con su número de sesiones y la última actividad.
+2. **Por fecha** dentro de cada directorio: Hoy · Ayer · Últimos 7 días · Últimos 30 días,
+   con la hora o la fecha alineada a la derecha. Cada bloque enseña 5 sesiones y un
+   "…y N más" para ver el resto.
 3. **Chats antiguos (más de 1 mes)**: plegados al final de cada directorio.
 
-Al pulsar una sesión se ven sus mensajes, rama de git, id y dos botones:
+Al pulsar una sesión se ven sus mensajes, rama de git, cuándo empezó y dos botones:
 **Reanudar** (ejecuta `/resume <id>`) y **Copiar comando**
 (`cd '<dir>' && claude --resume <id>`). Arriba hay un campo para filtrar por
-título o ruta, y `⟳` (tecla `r` con el panel enfocado) vuelve a escanear.
+título o ruta (despliega todo lo que coincide), y `⟳` (tecla `r` con el panel
+enfocado) vuelve a escanear. Si dos sesiones se llaman igual, se añade el principio
+de su id para distinguirlas.
 
 ## Uso
 
@@ -43,6 +48,8 @@ Para probarlo sin instalar: `claude --plugin-dir ~/.claude/mods/sesiones`.
   `projects/` es ambiguo con guiones, solo se usa si falta `cwd`).
 - **Fecha**: la última modificación del `.jsonl`, es decir, la última actividad.
 - **Título**: título personalizado > título automático > resumen > primer prompt.
+- Los avisos que Claude Code guarda como mensajes del usuario
+  (`[Request interrupted by user…]`) no cuentan como prompt ni como título.
 - Las sesiones sin ningún prompt se omiten. Los datos se cachean por tamaño y
   fecha del archivo, así que reescanear es rápido.
 
