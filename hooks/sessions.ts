@@ -31,6 +31,13 @@ function cleanText(text: string): string {
     .trim()
 }
 
+/** Mensajes que Claude Code escribe como si fueran del usuario y no sirven de título. */
+const NOISE = [/^\[Request interrupted by user\b/, /^Caveat: The messages below were generated/]
+
+function isNoise(text: string): boolean {
+  return NOISE.some(re => re.test(text))
+}
+
 function textOf(content: unknown): string {
   if (typeof content === 'string') return content
   if (!Array.isArray(content)) return ''
@@ -98,11 +105,10 @@ export function parseTranscript(
             b => b && typeof b === 'object' && (b as { type?: string }).type === 'tool_result',
           )
         if (isToolResult || row.isMeta === true) break
+        const clean = cleanText(textOf(message?.content))
+        if (isNoise(clean)) break
         messages++
-        if (firstPrompt === undefined) {
-          const clean = cleanText(textOf(message?.content))
-          if (clean) firstPrompt = clean
-        }
+        if (firstPrompt === undefined && clean) firstPrompt = clean
         break
       }
     }
@@ -197,6 +203,18 @@ export function formatWhen(ms: number, now: number): string {
     : `${date}/${d.getFullYear()}`
 }
 
+/** Versión corta para la columna derecha: `21:10`, `ayer`, `28/09` o `09/2025`. */
+export function formatShort(ms: number, now: number): string {
+  const d = new Date(ms)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const bucket = bucketOf(ms, now)
+  if (bucket === 'hoy') return `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  if (bucket === 'ayer') return 'ayer'
+  return new Date(now).getFullYear() === d.getFullYear()
+    ? `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`
+    : `${pad(d.getMonth() + 1)}/${d.getFullYear()}`
+}
+
 /** Comando para reanudar la sesión desde cualquier terminal. */
 export function resumeCommand(s: SessionMeta): string {
   // El id sale del nombre del .jsonl: normalmente un UUID, pero se cita si no lo es.
@@ -206,4 +224,52 @@ export function resumeCommand(s: SessionMeta): string {
 
 function shellQuote(text: string): string {
   return `'${text.replace(/'/g, `'\\''`)}'`
+}
+
+/** Largo en columnas contando puntos de código (las tildes precompuestas ocupan una). */
+export function cols(text: string): number {
+  return [...text].length
+}
+
+/** Recorta `text` a `width` columnas, con "…" si sobra. */
+export function fit(text: string, width: number): string {
+  const chars = [...text]
+  return chars.length > width ? `${chars.slice(0, Math.max(1, width - 1)).join('')}…` : text
+}
+
+/**
+ * Una línea de `width` columnas: `left` recortado a la izquierda y `right`
+ * pegado al borde derecho, así las horas y los contadores quedan en columna.
+ */
+export function alignRow(left: string, right: string, width: number): string {
+  const room = Math.max(1, width - cols(right) - 1)
+  const head = fit(left, room)
+  return head + ' '.repeat(Math.max(1, width - cols(head) - cols(right))) + right
+}
+
+/**
+ * Recorta una ruta por el medio conservando el principio y la última carpeta:
+ * `~/Obsidian/Universidad/Redes` → `~/Obsidian/…/Redes`.
+ */
+export function fitPath(path: string, width: number): string {
+  if (cols(path) <= width) return path
+  const parts = path.split('/')
+  const last = parts[parts.length - 1] ?? path
+  for (let keep = parts.length - 2; keep >= 1; keep--) {
+    const candidate = [...parts.slice(0, keep), '…', last].join('/')
+    if (cols(candidate) <= width) return candidate
+  }
+  return fit(`…/${last}`, width)
+}
+
+/**
+ * Etiqueta de cada sesión de una lista: el título, y si otro de la lista se
+ * llama igual, el principio del id para poder distinguirlos.
+ */
+export function rowTitles(sessions: readonly SessionMeta[]): Map<string, string> {
+  const seen = new Map<string, number>()
+  for (const s of sessions) seen.set(s.title, (seen.get(s.title) ?? 0) + 1)
+  return new Map(
+    sessions.map(s => [s.id, (seen.get(s.title) ?? 0) > 1 ? `${s.title} · ${s.id.slice(0, 8)}` : s.title]),
+  )
 }

@@ -120,7 +120,7 @@ test('el panel lista las sesiones del disco por directorio', async ($, on) => {
       requestId: 'sesiones',
       props: { title: 'Sesiones', isFocused: false, bodyColumns: 60, placement: 'dock' } as never,
     })
-    expect(await ui.find({ type: 'Text', text: /2 sesiones en 1 directorios/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Sesiones · 2 en 1 carpeta$/ })).toBeDefined()
     const dir = 'dir:/home/arch/proyectos/web'
     expect(await ui.find({ key: 's:abc' })).toBeUndefined()
     await ui.press({ key: dir })

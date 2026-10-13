@@ -21,6 +21,7 @@ declare module 'claude-code' {
       scan: ScanStatus
       openDirs: string[]
       openOld: string[]
+      openMore: string[]
       selected: string
       filter: string
       home: string
