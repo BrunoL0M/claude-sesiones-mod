@@ -7,6 +7,7 @@ import {
   groupSessions,
   parseTranscript,
   resumeCommand,
+  terminalArgv,
 } from '../hooks/sessions'
 import type { SessionMeta } from '../types'
 
@@ -192,5 +193,18 @@ describe('resumeCommand · seguridad', () => {
   test('un UUID normal se deja tal cual', async () => {
     const id = '0f8e2c1a-1b2c-4d5e-8f90-123456789abc'
     expect(resumeCommand(meta({ id, cwd: '/a' }))).toBe(`cd '/a' && claude --resume ${id}`)
+  })
+})
+
+describe('terminalArgv · abrir en otra terminal (issue #4)', () => {
+  test('la ruta y el id viajan como argumentos, fuera del script', async () => {
+    const argv = terminalArgv(meta({ id: 'x; rm -rf ~', cwd: "/tmp/$(rm -rf ~)'y" }))
+    expect(argv.slice(0, 2)).toEqual(['sh', '-c'])
+    expect(argv.slice(3)).toEqual(['sh', "/tmp/$(rm -rf ~)'y", 'claude', '--resume', 'x; rm -rf ~'])
+    expect(argv[2]).not.toContain('rm -rf')
+  })
+
+  test('se desacopla y no hereda las tuberías', async () => {
+    expect(terminalArgv(meta({}))[2]).toContain('setsid -f "$@" </dev/null >/dev/null 2>&1')
   })
 })

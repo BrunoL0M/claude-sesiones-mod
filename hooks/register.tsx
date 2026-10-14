@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
 import type { SessionMeta } from '../types'
 import {
@@ -16,6 +16,7 @@ import {
   resumeCommand,
   rowTitles,
   shortPath,
+  terminalArgv,
 } from './sessions'
 
 const PANE = 'sesiones'
@@ -120,6 +121,31 @@ function toggle(list: readonly string[], value: string): string[] {
   return list.includes(value) ? list.filter(v => v !== value) : [...list, value]
 }
 
+/**
+ * Reanuda en una terminal nueva una sesión de otra carpeta; si no se puede,
+ * copia el comando para pegarlo a mano.
+ */
+async function openInTerminal($: EngineInterface, s: SessionMeta, surface: RenderSurface | undefined): Promise<void> {
+  try {
+    const { exitCode, stderr } = await $.process.run(terminalArgv(s), { timeoutMs: 10_000 })
+    if (exitCode === 0) {
+      await $.ui.toast('Abriendo el chat en una terminal nueva')
+      return
+    }
+    throw new Error(stderr.trim())
+  } catch (error) {
+    const reason = error instanceof Error && error.message ? `${error.message}. ` : ''
+    const copied = await $.ui
+      .copy({ text: resumeCommand(s), surface })
+      .catch(() => ({ isCopied: false }))
+    await $.ui.toast(
+      copied.isCopied
+        ? `${reason}No pude abrir otra terminal; comando copiado`
+        : `${reason}No pude abrir otra terminal; usa: ${resumeCommand(s)}`,
+    )
+  }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -180,6 +206,8 @@ export const register: Register = on => {
 
     const sessionRow = (s: SessionMeta, label: string) => {
       const isPicked = picked === s.id
+      // Claude Code solo reanuda aquí chats de esta misma carpeta (issue #4).
+      const isElsewhere = here !== '' && s.cwd !== here
       const when = formatShort(s.updatedAt, now)
       const title = fit(label, width - 4 - cols(when) - 1)
       return (
@@ -201,17 +229,29 @@ export const register: Register = on => {
                 {formatWhen(s.startedAt, now)}
               </Text>
               <Box key={`actions:${s.id}`} flexDirection="row" gap={1}>
-                <Button
-                  key={`resume:${s.id}`}
-                  variant="primary"
-                  onPress={() => {
-                    $.command
-                      .run({ command: 'resume', args: s.id })
-                      .catch(() => $.ui.toast(`No pude reanudar; usa: ${resumeCommand(s)}`))
-                  }}
-                >
-                  Reanudar
-                </Button>
+                {isElsewhere ? (
+                  <Button
+                    key={`open:${s.id}`}
+                    variant="primary"
+                    onPress={press => {
+                      void openInTerminal($, s, press.surface)
+                    }}
+                  >
+                    Abrir en terminal
+                  </Button>
+                ) : (
+                  <Button
+                    key={`resume:${s.id}`}
+                    variant="primary"
+                    onPress={() => {
+                      $.command
+                        .run({ command: 'resume', args: s.id })
+                        .catch(() => $.ui.toast(`No pude reanudar; usa: ${resumeCommand(s)}`))
+                    }}
+                  >
+                    Reanudar
+                  </Button>
+                )}
                 <Button
                   key={`copy:${s.id}`}
                   onPress={press => {

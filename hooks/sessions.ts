@@ -222,6 +222,25 @@ export function resumeCommand(s: SessionMeta): string {
   return `cd ${shellQuote(s.cwd)} && claude --resume ${id}`
 }
 
+/**
+ * Argumentos para abrir una terminal nueva en la carpeta de la sesión y reanudarla allí.
+ * Claude Code no reanuda dentro de esta sesión un chat de otra carpeta, así que se lanza
+ * aparte: `xdg-terminal-exec` (la de Omarchy) o `$TERMINAL -e`, desacoplada con `setsid`
+ * y sin heredar las tuberías, para que `$.process.run` vuelva enseguida. La ruta y el id
+ * viajan como argumentos, nunca dentro del script.
+ */
+export function terminalArgv(s: SessionMeta): string[] {
+  const script = [
+    'dir=$1; shift',
+    'if command -v xdg-terminal-exec >/dev/null 2>&1; then set -- xdg-terminal-exec "$@"',
+    'elif [ -n "$TERMINAL" ]; then set -- "$TERMINAL" -e "$@"',
+    "else echo 'no encontré terminal (xdg-terminal-exec o $TERMINAL)' >&2; exit 127; fi",
+    'cd "$dir" 2>/dev/null || { echo "la carpeta ya no existe: $dir" >&2; exit 1; }',
+    'setsid -f "$@" </dev/null >/dev/null 2>&1',
+  ].join('\n')
+  return ['sh', '-c', script, 'sh', s.cwd, 'claude', '--resume', s.id]
+}
+
 function shellQuote(text: string): string {
   return `'${text.replace(/'/g, `'\\''`)}'`
 }

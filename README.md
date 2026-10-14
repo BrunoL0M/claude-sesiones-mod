@@ -13,7 +13,11 @@ equipo, leídas de `~/.claude/projects` (o `$CLAUDE_CONFIG_DIR/projects`):
 
 Al pulsar una sesión se ven sus mensajes, rama de git, cuándo empezó y dos botones:
 **Reanudar** (ejecuta `/resume <id>`) y **Copiar comando**
-(`cd '<dir>' && claude --resume <id>`). Arriba hay un campo para filtrar por
+(`cd '<dir>' && claude --resume <id>`). Claude Code solo reanuda dentro de la
+sesión los chats de la misma carpeta, así que en los de otra carpeta el botón
+es **Abrir en terminal**: abre una terminal nueva (`xdg-terminal-exec`, la de
+Omarchy, o `$TERMINAL -e`) en esa carpeta con `claude --resume <id>`. Si no
+puede, copia el comando. Arriba hay un campo para filtrar por
 título o ruta (despliega todo lo que coincide), y `⟳` (tecla `r` con el panel
 enfocado) vuelve a escanear. Si dos sesiones se llaman igual, se añade el principio
 de su id para distinguirlas.
