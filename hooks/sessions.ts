@@ -241,6 +241,24 @@ export function terminalArgv(s: SessionMeta): string[] {
   return ['sh', '-c', script, 'sh', s.cwd, 'claude', '--resume', s.id]
 }
 
+/**
+ * Argumentos para cambiar el título de un chat: añade al final del .jsonl la misma
+ * línea `custom-title` que escribe `/rename`, y deja la fecha de modificación como
+ * estaba para que el chat no salte a "Hoy" ni salga de "Chats antiguos".
+ * Devuelve undefined si el título queda vacío.
+ */
+export function renameArgv(file: string, id: string, title: string): string[] | undefined {
+  const clean = title.replace(/\s+/g, ' ').trim()
+  if (!clean) return undefined
+  const row = JSON.stringify({ type: 'custom-title', customTitle: clean, sessionId: id })
+  const script = [
+    'f=$1; t=$(mktemp) || exit 1',
+    'touch -r "$f" "$t" && printf \'%s\\n\' "$2" >> "$f"; ok=$?',
+    'touch -c -r "$t" "$f"; rm -f "$t"; exit $ok',
+  ].join('\n')
+  return ['sh', '-c', script, 'sh', file, row]
+}
+
 function shellQuote(text: string): string {
   return `'${text.replace(/'/g, `'\\''`)}'`
 }

@@ -6,6 +6,7 @@ import {
   formatWhen,
   groupSessions,
   parseTranscript,
+  renameArgv,
   resumeCommand,
   terminalArgv,
 } from '../hooks/sessions'
@@ -206,5 +207,29 @@ describe('terminalArgv · abrir en otra terminal (issue #4)', () => {
 
   test('se desacopla y no hereda las tuberías', async () => {
     expect(terminalArgv(meta({}))[2]).toContain('setsid -f "$@" </dev/null >/dev/null 2>&1')
+  })
+})
+
+describe('renameArgv · cambiar el título', () => {
+  test('añade la línea custom-title de /rename, con ruta y título como argumentos', async () => {
+    const argv = renameArgv("/p/a'b.jsonl", 'abc', '  Nuevo\n  título $(x) "q"  ')!
+    expect(argv.slice(0, 2)).toEqual(['sh', '-c'])
+    expect(argv.slice(3, 5)).toEqual(['sh', "/p/a'b.jsonl"])
+    expect(JSON.parse(argv[5]!)).toEqual({
+      type: 'custom-title',
+      customTitle: 'Nuevo título $(x) "q"',
+      sessionId: 'abc',
+    })
+    expect(argv[2]).not.toContain('Nuevo')
+  })
+
+  test('un título vacío no cambia nada', async () => {
+    expect(renameArgv('/p/a.jsonl', 'abc', '   ')).toBeUndefined()
+  })
+
+  test('el título nuevo gana al automático al volver a leer', async () => {
+    const row = renameArgv('/p/a.jsonl', 'abc', 'Mi título')![5]!
+    const text = [user('hola', { cwd: '/a' }), line({ type: 'ai-title', aiTitle: 'Auto' }), row].join('\n')
+    expect(parseTranscript('abc', text, NOW, '/a')?.title).toBe('Mi título')
   })
 })

@@ -6,6 +6,8 @@ export type SessionMeta = {
   startedAt: number
   updatedAt: number
   messages: number
+  /** Ruta del .jsonl; la pone el escaneo, no se guarda en la caché. */
+  file?: string
 }
 
 export type ScanStatus = {
@@ -23,6 +25,7 @@ declare module 'claude-code' {
       openOld: string[]
       openMore: string[]
       selected: string
+      renaming: string
       filter: string
       home: string
       cwd: string
