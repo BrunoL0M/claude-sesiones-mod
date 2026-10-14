@@ -1,6 +1,6 @@
 {
   "name": "sesiones",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Panel con todas las sesiones locales de Claude Code, agrupadas por directorio y fecha, con chats antiguos aparte",
   "types": "./types/index.d.ts",
   "author": {

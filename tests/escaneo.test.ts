@@ -120,14 +120,16 @@ describe('escaneo y caché', () => {
     expect((await run($, 'actualizar')).text).toContain('1 sesiones')
   })
 
-  test('un transcript de más de 4 MB se lee con head, no entero', async ($, on) => {
+  test('un transcript de más de 4 MB se lee con head y tail, no entero', async ($, on) => {
     mock.env(on, { HOME: '/home/arch' })
     mock.store(on)
     on('ui.open', async () => ({ value: { isPlaced: true } as const }))
     const seen = disk(on, [{ name: 'g.jsonl', mtimeMs: now, size: 50 * 1024 * 1024 }])
     expect((await run($)).text).toContain('1 sesiones')
     expect(seen.reads).toEqual([])
-    expect(seen.heads).toEqual([`head -c 1048576 ${ROOT}/${DIR}/g.jsonl`])
+    expect(seen.heads).toEqual([
+      `sh -c head -c "$1" "$3"; echo; tail -c "$2" "$3" sh 1048576 262144 ${ROOT}/${DIR}/g.jsonl`,
+    ])
   })
 
   test('si un archivo no se puede leer, el resto aparece igual', async ($, on) => {

@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
 import type { SessionMeta } from '../types'
 import {
@@ -16,6 +16,8 @@ import {
   resumeCommand,
   rowTitles,
   shortPath,
+  renameArgv,
+  terminalArgv,
 } from './sessions'
 
 const PANE = 'sesiones'
@@ -24,6 +26,7 @@ const PER_BUCKET = 5
 const TITLE = 'Sesiones'
 const MAX_READ = 4 * 1024 * 1024 - 1
 const HEAD_BYTES = String(1024 * 1024)
+const TAIL_BYTES = String(256 * 1024)
 const CACHE_KEY = 'cache-v1'
 
 const sessions = atom({ plugin: 'sesiones', key: 'sessions' } as const, [])
@@ -32,6 +35,7 @@ const openDirs = atom({ plugin: 'sesiones', key: 'openDirs' } as const, [])
 const openOld = atom({ plugin: 'sesiones', key: 'openOld' } as const, [])
 const openMore = atom({ plugin: 'sesiones', key: 'openMore' } as const, [])
 const selected = atom({ plugin: 'sesiones', key: 'selected' } as const, '')
+const renaming = atom({ plugin: 'sesiones', key: 'renaming' } as const, '')
 const filter = atom({ plugin: 'sesiones', key: 'filter' } as const, '')
 const home = atom({ plugin: 'sesiones', key: 'home' } as const, '')
 const cwdRef = { plugin: 'sesiones', key: 'cwd' } as const
@@ -49,8 +53,17 @@ async function projectsDir($: EngineInterface): Promise<string | undefined> {
 
 async function readTranscript($: EngineInterface, path: string, size: number): Promise<string> {
   if (size <= MAX_READ) return $.fs.read(path)
-  // Transcripts enormes: basta con el principio para sacar cwd, título y primer prompt.
-  const { stdout } = await $.process.run(['head', '-c', HEAD_BYTES, path])
+  // Transcripts enormes: el principio da cwd y primer prompt; el final, el título
+  // que se añadió después (`/rename` o el botón Renombrar escriben al final).
+  const { stdout } = await $.process.run([
+    'sh',
+    '-c',
+    'head -c "$1" "$3"; echo; tail -c "$2" "$3"',
+    'sh',
+    HEAD_BYTES,
+    TAIL_BYTES,
+    path,
+  ])
   return stdout
 }
 
@@ -90,7 +103,7 @@ async function doRescan($: EngineInterface): Promise<void> {
         const cached = old[path]
         if (cached && cached.m === file.mtimeMs && cached.s === file.size) {
           next[path] = cached
-          if (cached.meta) found.push(cached.meta)
+          if (cached.meta) found.push({ ...cached.meta, file: path })
           continue
         }
         jobs.push(async () => {
@@ -98,7 +111,7 @@ async function doRescan($: EngineInterface): Promise<void> {
           const text = await readTranscript($, path, file.size).catch(() => '')
           const meta = parseTranscript(id, text, file.mtimeMs, decodeProjectDir(dir.name)) ?? null
           next[path] = { m: file.mtimeMs, s: file.size, meta }
-          if (meta) found.push(meta)
+          if (meta) found.push({ ...meta, file: path })
         })
       }
     }
@@ -118,6 +131,47 @@ async function doRescan($: EngineInterface): Promise<void> {
 
 function toggle(list: readonly string[], value: string): string[] {
   return list.includes(value) ? list.filter(v => v !== value) : [...list, value]
+}
+
+/** Cambia el título de un chat en su .jsonl y en la lista, sin reescanear. */
+async function renameSession($: EngineInterface, s: SessionMeta, title: string): Promise<void> {
+  await update($, renaming, () => '')
+  const argv = s.file ? renameArgv(s.file, s.id, title) : undefined
+  if (!argv || title.trim() === s.title) return
+  try {
+    const { exitCode, stderr } = await $.process.run(argv)
+    if (exitCode !== 0) throw new Error(stderr.trim() || `código ${exitCode}`)
+    const clean = title.replace(/\s+/g, ' ').trim()
+    await update($, sessions, list => list.map(x => (x.id === s.id ? { ...x, title: clean } : x)))
+    await $.ui.toast('Título cambiado')
+  } catch (error) {
+    await $.ui.toast(`No pude cambiar el título: ${error instanceof Error ? error.message : error}`)
+  }
+}
+
+/**
+ * Reanuda en una terminal nueva una sesión de otra carpeta; si no se puede,
+ * copia el comando para pegarlo a mano.
+ */
+async function openInTerminal($: EngineInterface, s: SessionMeta, surface: RenderSurface | undefined): Promise<void> {
+  try {
+    const { exitCode, stderr } = await $.process.run(terminalArgv(s), { timeoutMs: 10_000 })
+    if (exitCode === 0) {
+      await $.ui.toast('Abriendo el chat en una terminal nueva')
+      return
+    }
+    throw new Error(stderr.trim())
+  } catch (error) {
+    const reason = error instanceof Error && error.message ? `${error.message}. ` : ''
+    const copied = await $.ui
+      .copy({ text: resumeCommand(s), surface })
+      .catch(() => ({ isCopied: false }))
+    await $.ui.toast(
+      copied.isCopied
+        ? `${reason}No pude abrir otra terminal; comando copiado`
+        : `${reason}No pude abrir otra terminal; usa: ${resumeCommand(s)}`,
+    )
+  }
 }
 
 export const register: Register = on => {
@@ -163,6 +217,7 @@ export const register: Register = on => {
     const oldOpen = await read($, openOld)
     const moreOpen = await read($, openMore)
     const picked = await read($, selected)
+    const renamingId = await read($, renaming)
     const query = await read($, filter)
     const homeDir = await read($, home)
     const here = await read($, cwd)
@@ -180,6 +235,9 @@ export const register: Register = on => {
 
     const sessionRow = (s: SessionMeta, label: string) => {
       const isPicked = picked === s.id
+      // Claude Code solo reanuda aquí chats de esta misma carpeta (issue #4): en los
+      // de otra, "Abrir en terminal" pasa a ser la acción principal.
+      const isElsewhere = here !== '' && s.cwd !== here
       const when = formatShort(s.updatedAt, now)
       const title = fit(label, width - 4 - cols(when) - 1)
       return (
@@ -200,10 +258,10 @@ export const register: Register = on => {
                 {s.messages} mensajes{s.gitBranch ? ` · rama ${s.gitBranch}` : ''} · empezó{' '}
                 {formatWhen(s.startedAt, now)}
               </Text>
-              <Box key={`actions:${s.id}`} flexDirection="row" gap={1}>
+              <Box key={`actions:${s.id}`} flexDirection="row" flexWrap="wrap" columnGap={1}>
                 <Button
                   key={`resume:${s.id}`}
-                  variant="primary"
+                  variant={isElsewhere ? undefined : 'primary'}
                   onPress={() => {
                     $.command
                       .run({ command: 'resume', args: s.id })
@@ -211,6 +269,23 @@ export const register: Register = on => {
                   }}
                 >
                   Reanudar
+                </Button>
+                {isElsewhere && (
+                  <Button
+                    key={`open:${s.id}`}
+                    variant="primary"
+                    onPress={press => {
+                      void openInTerminal($, s, press.surface)
+                    }}
+                  >
+                    Abrir en terminal
+                  </Button>
+                )}
+                <Button
+                  key={`rename:${s.id}`}
+                  onPress={() => update($, renaming, cur => (cur === s.id ? '' : s.id))}
+                >
+                  Renombrar
                 </Button>
                 <Button
                   key={`copy:${s.id}`}
@@ -223,6 +298,16 @@ export const register: Register = on => {
                   Copiar comando
                 </Button>
               </Box>
+              {Input && renamingId === s.id && s.file && (
+                <Input
+                  key={`title:${s.id}`}
+                  label="Nuevo título"
+                  placeholder="Enter guarda; vacío cancela"
+                  value={s.title}
+                  autoFocus
+                  onSubmit={value => void renameSession($, s, value)}
+                />
+              )}
             </Box>
           )}
         </Box>

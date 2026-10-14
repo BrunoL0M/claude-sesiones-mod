@@ -6,7 +6,9 @@ import {
   formatWhen,
   groupSessions,
   parseTranscript,
+  renameArgv,
   resumeCommand,
+  terminalArgv,
 } from '../hooks/sessions'
 import type { SessionMeta } from '../types'
 
@@ -192,5 +194,42 @@ describe('resumeCommand · seguridad', () => {
   test('un UUID normal se deja tal cual', async () => {
     const id = '0f8e2c1a-1b2c-4d5e-8f90-123456789abc'
     expect(resumeCommand(meta({ id, cwd: '/a' }))).toBe(`cd '/a' && claude --resume ${id}`)
+  })
+})
+
+describe('terminalArgv · abrir en otra terminal (issue #4)', () => {
+  test('la ruta y el id viajan como argumentos, fuera del script', async () => {
+    const argv = terminalArgv(meta({ id: 'x; rm -rf ~', cwd: "/tmp/$(rm -rf ~)'y" }))
+    expect(argv.slice(0, 2)).toEqual(['sh', '-c'])
+    expect(argv.slice(3)).toEqual(['sh', "/tmp/$(rm -rf ~)'y", 'claude', '--resume', 'x; rm -rf ~'])
+    expect(argv[2]).not.toContain('rm -rf')
+  })
+
+  test('se desacopla y no hereda las tuberías', async () => {
+    expect(terminalArgv(meta({}))[2]).toContain('setsid -f "$@" </dev/null >/dev/null 2>&1')
+  })
+})
+
+describe('renameArgv · cambiar el título', () => {
+  test('añade la línea custom-title de /rename, con ruta y título como argumentos', async () => {
+    const argv = renameArgv("/p/a'b.jsonl", 'abc', '  Nuevo\n  título $(x) "q"  ')!
+    expect(argv.slice(0, 2)).toEqual(['sh', '-c'])
+    expect(argv.slice(3, 5)).toEqual(['sh', "/p/a'b.jsonl"])
+    expect(JSON.parse(argv[5]!)).toEqual({
+      type: 'custom-title',
+      customTitle: 'Nuevo título $(x) "q"',
+      sessionId: 'abc',
+    })
+    expect(argv[2]).not.toContain('Nuevo')
+  })
+
+  test('un título vacío no cambia nada', async () => {
+    expect(renameArgv('/p/a.jsonl', 'abc', '   ')).toBeUndefined()
+  })
+
+  test('el título nuevo gana al automático al volver a leer', async () => {
+    const row = renameArgv('/p/a.jsonl', 'abc', 'Mi título')![5]!
+    const text = [user('hola', { cwd: '/a' }), line({ type: 'ai-title', aiTitle: 'Auto' }), row].join('\n')
+    expect(parseTranscript('abc', text, NOW, '/a')?.title).toBe('Mi título')
   })
 })
