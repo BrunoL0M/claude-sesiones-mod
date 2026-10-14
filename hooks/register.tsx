@@ -258,7 +258,7 @@ export const register: Register = on => {
                 {s.messages} mensajes{s.gitBranch ? ` · rama ${s.gitBranch}` : ''} · empezó{' '}
                 {formatWhen(s.startedAt, now)}
               </Text>
-              <Box key={`actions:${s.id}`} flexDirection="row" gap={1}>
+              <Box key={`actions:${s.id}`} flexDirection="row" flexWrap="wrap" columnGap={1}>
                 <Button
                   key={`resume:${s.id}`}
                   variant={isElsewhere ? undefined : 'primary'}
