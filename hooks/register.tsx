@@ -235,7 +235,8 @@ export const register: Register = on => {
 
     const sessionRow = (s: SessionMeta, label: string) => {
       const isPicked = picked === s.id
-      // Claude Code solo reanuda aquí chats de esta misma carpeta (issue #4).
+      // Claude Code solo reanuda aquí chats de esta misma carpeta (issue #4): en los
+      // de otra, "Abrir en terminal" pasa a ser la acción principal.
       const isElsewhere = here !== '' && s.cwd !== here
       const when = formatShort(s.updatedAt, now)
       const title = fit(label, width - 4 - cols(when) - 1)
@@ -258,7 +259,18 @@ export const register: Register = on => {
                 {formatWhen(s.startedAt, now)}
               </Text>
               <Box key={`actions:${s.id}`} flexDirection="row" gap={1}>
-                {isElsewhere ? (
+                <Button
+                  key={`resume:${s.id}`}
+                  variant={isElsewhere ? undefined : 'primary'}
+                  onPress={() => {
+                    $.command
+                      .run({ command: 'resume', args: s.id })
+                      .catch(() => $.ui.toast(`No pude reanudar; usa: ${resumeCommand(s)}`))
+                  }}
+                >
+                  Reanudar
+                </Button>
+                {isElsewhere && (
                   <Button
                     key={`open:${s.id}`}
                     variant="primary"
@@ -267,18 +279,6 @@ export const register: Register = on => {
                     }}
                   >
                     Abrir en terminal
-                  </Button>
-                ) : (
-                  <Button
-                    key={`resume:${s.id}`}
-                    variant="primary"
-                    onPress={() => {
-                      $.command
-                        .run({ command: 'resume', args: s.id })
-                        .catch(() => $.ui.toast(`No pude reanudar; usa: ${resumeCommand(s)}`))
-                    }}
-                  >
-                    Reanudar
                   </Button>
                 )}
                 <Button
