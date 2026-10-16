@@ -6,7 +6,7 @@ carpeta donde empezaron, luego por fecha, y con los de más de un mes aparte en
 **Chats antiguos**.
 
 ```
-Sesiones · 42 en 5 carpetas                       ⟳
+Sesiones · 42 en 5 carpetas                    r: ⟳
 Filtrar: título o carpeta
 ─────────────────────────────────────────────────
 ▾ ~/.claude/mods/sesiones ●                     12
