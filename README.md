@@ -1,5 +1,7 @@
 # Sesiones · mod para Claude Code
 
+**Español** · [English](README.en.md)
+
 Un panel dentro de Claude Code (en la terminal) con **todos los chats locales de
 este equipo**, como la lista de sesiones de la versión web: agrupados por la
 carpeta donde empezaron, luego por fecha, y con los de más de un mes aparte en
@@ -174,3 +176,5 @@ claude plugin test .       # ejecuta las pruebas de tests/
 
 Si un cambio afecta al mod (no solo a la documentación), sube `version` en
 `.claude-plugin/plugin.json` para que llegue con `claude plugin update`.
+
+Si cambias este README, actualiza también [README.en.md](README.en.md) (inglés).
